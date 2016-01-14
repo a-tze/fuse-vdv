@@ -183,7 +183,7 @@ static int vdv_open (const char *path, struct fuse_file_info *fi) {
 	if (entrynr < 0) return -ENOENT;
 	switch(entrynr) {
 	case INDEX_RAW:
-		if ((fi->flags & 3) != O_RDONLY)
+		if (fi->flags & (O_WRONLY | O_RDWR))
 			return -EACCES;
 		check_signal ();
 		pthread_mutex_lock (&globalmutex);
@@ -226,11 +226,11 @@ static int vdv_open (const char *path, struct fuse_file_info *fi) {
 		check_signal ();
 		return 0;
 	case INDEX_KDENLIVE:
-		if ((fi->flags & 3) != O_RDONLY)
+		if ((fi->flags & (O_WRONLY | O_RDWR)) != O_RDONLY)
 			open_kdenlive_project_file (rawName, file_length / frame_size, blanklen, ((fi->flags & O_TRUNC) > 0));
 		return 0;
 	case INDEX_SHOTCUT:
-		if ((fi->flags & 3) != O_RDONLY)
+		if ((fi->flags & (O_WRONLY | O_RDWR)) != O_RDONLY)
 			open_shotcut_project_file (rawName, file_length / frame_size, blanklen, ((fi->flags & O_TRUNC) > 0));
 		return 0;
 	case INDEX_INFRAME:
@@ -250,19 +250,27 @@ static int vdv_truncate (const char *path, off_t size) {
 	debug_printf ("truncate called on '%s' with size %" PRId64 "\n", path, size);
 	int entrynr = get_index_from_pathname(path);
 	if (entrynr < 0) return -ENOENT;
+	size_t tmp;
 	switch(entrynr) {
 	case INDEX_SHOTCUT:
-		truncate_shotcut_project_file();
-		break;
+		return truncate_shotcut_project_file(size);
 	case INDEX_KDENLIVE:
-		truncate_kdenlive_project_file();
-		break;
+		return truncate_kdenlive_project_file(size);
+
 	case INDEX_INFRAME:
-		inframe_str_length = 0;
-		break;
+		tmp = truncate_buffer(&inframe_str, inframe_str_length, size);
+		if (tmp < 0 || tmp < size) {
+			return -EIO;
+		}
+		inframe_str_length = tmp;
+		return 0;
 	case INDEX_OUTFRAME:
-		outframe_str_length = 0;
-		break;
+		tmp = truncate_buffer(&outframe_str, outframe_str_length, size);
+		if (tmp < 0 || tmp < size) {
+			return -EIO;
+		}
+		outframe_str_length = tmp;
+		return 0;
 	default:
 		return -EACCES;
 	}

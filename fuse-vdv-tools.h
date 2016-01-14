@@ -18,6 +18,8 @@ extern char * equalize_date_string (const char * s);
 extern int    compare_date_strings (const char * s1, const char * s2);
 extern int    datestring_to_timestamp (const char * s);
 
+extern size_t truncate_buffer (char ** target, size_t bufferlength, size_t newbufferlength);
+
 // TODO: eliminate:
 extern size_t write_to_buffer (const char *buffer, size_t size, off_t offset, char **target, size_t * bufferlength);
 

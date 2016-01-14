@@ -13,7 +13,7 @@
 #include "fuse-vdv-filebuffer.h"
 #include "fuse-vdv-shotcut.h"
 
-char *shotcut_path = "/project_shotcut.mlt";
+const char *shotcut_path = "/project_shotcut.mlt";
 static const char *sc_template;
 
 static filebuffer_t* sc_project_file_cache = NULL;
@@ -25,26 +25,25 @@ static filebuffer_t *sc_writebuffer = NULL;
 
 filebuffer_t* get_shotcut_project_file_cache (const char *filename, int num_frames, int blanklen) {
 	pthread_mutex_lock (&sc_cachemutex);
+
 	if ((sc_project_file_cache != NULL) && (sc_project_file_cache_frames == num_frames)) {
 		debug_printf ("get_shotcut_project_file: filename: '%s' frames: %d --> cache hit: (%p)\n", filename, num_frames, sc_project_file_cache);
 		pthread_mutex_unlock (&sc_cachemutex);
 		return sc_project_file_cache;
 	}
-	int _outframe = (outframe < 0) ? lastframe : outframe;
-	char *t = merge_strs (3, mountpoint, "/", filename);
-	debug_printf ("%s: filename: '%s' path: '%s' frames: %d\n", __FUNCTION__, filename, t, num_frames);
 
+	int _outframe = (outframe < 0) ? lastframe : outframe;
 	const size_t size = strlen(sc_template) * 2;
 	if (sc_project_file_cache == NULL) sc_project_file_cache = filebuffer__new();
 	char* temp = (char *) malloc (size);
 	CHECK_OOM(temp);
-	int len = snprintf (temp, size - 1, sc_template, inframe, num_frames, num_frames - 1, (off_t) (num_frames * frame_size), t, _outframe, blanklen);
+	int len = snprintf (temp, size - 1, sc_template, inframe, num_frames, num_frames - 1, (off_t) (num_frames * frame_size), filename, _outframe, blanklen);
 	if (len >= size) err(124, "%s: size fail when generating project file\n", __FUNCTION__);
 	debug_printf ("get_shotcut_project_file: result has a size of: %d\n", len);
 	filebuffer__write(sc_project_file_cache, temp, len, 0);
+	filebuffer__truncate(sc_project_file_cache, len);
 	sc_project_file_cache_frames = num_frames;
 	free (temp);
-	free (t);
 
 	pthread_mutex_unlock (&sc_cachemutex);
 	return sc_project_file_cache;
@@ -88,8 +87,16 @@ void open_shotcut_project_file (const char *movie_path, int frames, int blanklen
 	}
 }
 
-void truncate_shotcut_project_file() {
-	if (sc_writebuffer != NULL) filebuffer__truncate(sc_writebuffer, 0);
+int truncate_shotcut_project_file(size_t size) {
+	if (sc_writebuffer != NULL)  {
+		size_t l = filebuffer__truncate(sc_writebuffer, size);
+		if (l < 0 || l < size) {
+			return -EIO;
+		}
+	} else {
+		sc_writebuffer = filebuffer__new();
+	}
+	return 0;
 }
 
 size_t write_shotcut_project_file (const char *buffer, size_t size, off_t offset) {
@@ -197,19 +204,20 @@ int find_cutmarks_in_shotcut_project_file (int *inframe, int *outframe, int *bla
 	*blanklen = blank;
 	*inframe = in;
 	*outframe = out;
+	init_shotcut_project_file();
 	return 0;
 }
 
 
 //   %1$d => inframe,  %2$d => frames, %3$d => frames - 1 
-//   %4$(PRI64d) => filesize, %5$s => filename with path
+//   %4$(PRI64d) => filesize, %5$s => filename without path
 //   %6$d => outframe
 
 static const char *sc_template =
 "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-"<mlt LC_NUMERIC=\"de_DE.UTF-8\" version=\"0.9.2\" root=\"/tmp\" title=\"Anonymous Submission\" parent=\"producer0\" in=\"%1$d\" out=\"%6$d\">\n"
-"  <profile description=\"automatic\" width=\"720\" height=\"576\" progressive=\"1\" sample_aspect_num=\"16\" sample_aspect_den=\"15\" display_aspect_num=\"768\" display_aspect_den=\"576\" frame_rate_num=\"25\" frame_rate_den=\"1\" colorspace=\"601\"/>\n"
-"  <producer id=\"producer0\" title=\"Anonymous Submission\" in=\"%1$d\" out=\"%6$d\">\n"
+"<mlt LC_NUMERIC=\"C\" version=\"0.9.9\" title=\"FUSE-TS\" parent=\"producer0\" in=\"%1$d\" out=\"%6$d\">\n"
+"  <profile description=\"automatic\" />\n"
+"  <producer id=\"producer0\" title=\"Source Clip\" in=\"%1$d\" out=\"%6$d\">\n"
 "    <property name=\"mlt_type\">mlt_producer</property>\n"
 "    <property name=\"length\">%2$d</property>\n"
 "    <property name=\"eof\">pause</property>\n"
@@ -218,13 +226,14 @@ static const char *sc_template =
 "    <property name=\"aspect_ratio\">1,06667</property>\n"
 "    <property name=\"audio_index\">1</property>\n"
 "    <property name=\"video_index\">0</property>\n"
-"    <property name=\"mlt_service\">avformat</property>\n"
+"    <property name=\"mute_on_pause\">0</property>\n"
+"    <property name=\"mlt_service\">avformat-novalidate</property>\n"
 "    <property name=\"ignore_points\">0</property>\n"
 "    <property name=\"global_feed\">1</property>\n"
 "  </producer>\n"
 "  <!--\n"
 "  %1$d => inframe,  %2$d => frames, %3$d => frames - 1\n"
-"  %4$" PRId64 " => filesize, %5$s => filename with path\n"
+"  %4$" PRId64 " => filesize, %5$s => filename without path\n"
 "  %6$d => outframe %7$d => blanklen\n"
 "  -->\n"
 "</mlt>\n";
