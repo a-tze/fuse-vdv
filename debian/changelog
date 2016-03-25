@@ -1,3 +1,10 @@
+fuse-vdv (2016.03.25.1) stable; urgency=low
+
+  * version bump: relative path in shotcut file, inherently supporting
+    Shotcut on all platforms
+
+ -- Matthias Hunstock <atze@fem.tu-ilmenau.de>  Fri, 25 Mar 2016 20:40:23 +0100
+
 fuse-vdv (2015.03.12.2) stable; urgency=low
 
   * Improvement: better error reporting in shotcut support
