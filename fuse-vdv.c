@@ -226,12 +226,10 @@ static int vdv_open (const char *path, struct fuse_file_info *fi) {
 		check_signal ();
 		return 0;
 	case INDEX_KDENLIVE:
-		if ((fi->flags & (O_WRONLY | O_RDWR)) != O_RDONLY)
-			open_kdenlive_project_file (rawName, file_length / frame_size, blanklen, ((fi->flags & O_TRUNC) > 0));
+		open_kdenlive_project_file (rawName, file_length / frame_size, blanklen, ((fi->flags & O_TRUNC) > 0));
 		return 0;
 	case INDEX_SHOTCUT:
-		if ((fi->flags & (O_WRONLY | O_RDWR)) != O_RDONLY)
-			open_shotcut_project_file (rawName, file_length / frame_size, blanklen, ((fi->flags & O_TRUNC) > 0));
+		open_shotcut_project_file (rawName, file_length / frame_size, blanklen, ((fi->flags & O_TRUNC) > 0));
 		return 0;
 	case INDEX_INFRAME:
 	case INDEX_OUTFRAME:
